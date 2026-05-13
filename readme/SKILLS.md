@@ -29,11 +29,12 @@
 
 命名建議：
 
-- 音樂放 `assets/audio`。
-- 音效放 `assets/sfx`。
+- 音樂放 `assets/sounds/bgm`。
+- 音效放 `assets/sounds/sfx`。
+- 角色放 `assets/characters`。
 - 武器放 `assets/weapon`。
 - 忍術放 `assets/ninju`。
-- 房間 UI 放 `assets/room-ui-selected` 或候選素材放 `assets/room-candidates`。
+- 房間 UI 放 `assets/room`，候選素材集中放 `assets/_candidates`。
 
 ## Skill: Combat / Weapon Changes
 
@@ -69,7 +70,7 @@
 
 - `game.html`
 - `style.css`
-- `assets/room-ui-selected`
+- `assets/room`
 
 注意：
 

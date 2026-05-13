@@ -19,8 +19,8 @@ C:\Users\lane6\Documents\Codex\2026-05-03\2-c-users-lane6-onedrive-desktop\game.
 
 ## 目前玩法
 
-- 起始畫面是房間，大廳 BGM 使用 `assets/audio/lobby.mp3`。
-- 按「戰鬥開始」進入戰鬥，地圖 BGM 使用 `assets/audio/bgm.mp3`。
+- 起始畫面是房間，大廳 BGM 使用 `assets/sounds/bgm/lobby.mp3`。
+- 按「戰鬥開始」進入戰鬥，地圖 BGM 使用 `assets/sounds/bgm/bgm.mp3`。
 - 結算畫面出現後停止地圖 BGM。
 - 玩家只控制 `Blue 1`，其他 5 隻角色是 AI。
 - 角色 HP 300，技最大 18，起始技為滿。
@@ -72,7 +72,7 @@ assets/weapon/3忍太刀
 - 房間左下角有音樂 / 音效滑桿。
 - 音樂滑桿同時控制房間 BGM 和地圖 BGM。
 - 音效滑桿控制 `sounds` 內所有短音效。
-- 多數音效在 `assets/sfx/`。
+- 多數音效在 `assets/sounds/sfx/`。
 
 ## 驗證
 

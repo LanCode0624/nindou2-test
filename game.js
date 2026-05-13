@@ -10,6 +10,13 @@ const musicVolumeInput = document.querySelector("#musicVolume");
 const sfxVolumeInput = document.querySelector("#sfxVolume");
 const ruleModeToggle = document.querySelector("#ruleModeToggle");
 const ruleModeCheckbox = document.querySelector("#ruleModeCheckbox");
+const teamEditBtn = document.querySelector("#teamEditBtn");
+const ninjuEditorEl = document.querySelector("#ninjuEditor");
+const ninjuEditorSlotsEl = document.querySelector("#ninjuEditorSlots");
+const ninjuEditorListEl = document.querySelector("#ninjuEditorList");
+const ninjuEditorResetBtn = document.querySelector("#ninjuEditorReset");
+const ninjuEditorCancelBtn = document.querySelector("#ninjuEditorCancel");
+const ninjuEditorSaveBtn = document.querySelector("#ninjuEditorSave");
 const roomCardEls = Array.from(document.querySelectorAll(".room-player-card"));
 const weaponSelectEls = Array.from(document.querySelectorAll(".room-weapon-select"));
 const controlSelectEls = Array.from(document.querySelectorAll(".room-control-select"));
@@ -38,17 +45,90 @@ const state = {
   pulse: 0,
   lastFrame: performance.now(),
   projectiles: [],
+  ninjuDamageEffects: [],
   moneyDartCasts: [],
   useOriginalMode: false,
 };
 
-// 眼睛貼圖位置（相對角色中心）。X 正值往右，Y 正值往下。
+const ninjuCatalog = [
+  { type: "moneyDart", label: "錢鏢", group: "projectile", editorRow: "special", editorOrder: 1 },
+  { type: "steel", label: "鋼鐵", group: "buff", editorRow: "support", editorOrder: 1 },
+  { type: "hotBlood", label: "熱血", group: "buff", editorRow: "support", editorOrder: 2 },
+  { type: "flash", label: "閃光", group: "attack", editorRow: "attack", editorOrder: 1 },
+  { type: "wildfire", label: "野火", group: "attack", editorRow: "attack", editorOrder: 2 },
+  { type: "freeze", label: "急凍", group: "attack", editorRow: "attack", editorOrder: 3 },
+  { type: "genki", label: "元氣", group: "heal", editorRow: "heal", editorOrder: 1 },
+  { type: "kakki", label: "活氣", group: "heal", editorRow: "heal", editorOrder: 2 },
+  { type: "shinki", label: "神氣", group: "heal", editorRow: "heal", editorOrder: 3 },
+];
+const ninjuByType = Object.fromEntries(ninjuCatalog.map((ninju) => [ninju.type, ninju]));
+const ninjuEditorRowOrder = { heal: 1, support: 2, attack: 3, special: 4, transform: 5 };
+const ninjuEditorCatalog = [...ninjuCatalog].sort((a, b) => (
+  (ninjuEditorRowOrder[a.editorRow] || 99) - (ninjuEditorRowOrder[b.editorRow] || 99)
+  || a.editorOrder - b.editorOrder
+));
+const defaultNinjuLoadout = ["moneyDart", "steel", "hotBlood", "genki", "kakki", "shinki"];
+const ninjuLoadoutStorageKey = "nindou2.ninjuLoadout";
+let selectedNinjuLoadout = loadSavedNinjuLoadout();
+let editNinjuDraft = [...selectedNinjuLoadout];
+let editNinjuSlotIndex = 0;
+let restartHoldStartedAt = 0;
+let restartHoldTriggered = false;
+
+// 眼睛貼圖位置（相對角色中心）。X 正值往右，Y 正值往上。
 // 你可以直接調這裡微調外觀。
 const eyeOffsets = {
-  down: { x: -14, y: -25, w: 30, h: 13 },  // 下：雙眼；x/y 是 offset，w/h 是眼睛大小。
+  down: { x: -14, y: 25, w: 30, h: 13 },  // 下：雙眼；x/y 是 offset，w/h 是眼睛大小。
   up: null,                                  // 上：不顯示眼睛；要顯示時改成 {x,y,w,h}。
-  right: { x: 3, y: -26, w: 20, h: 15 },   // 右：單眼；x 加大往右、y 加大往下。
-  left: { x: -19, y: -26, w: 20, h: 15 },  // 左：單眼；通常和 right 用不同 x 來貼頭型。
+  right: { x: 3, y: 26, w: 20, h: 15 },   // 右：單眼；x 加大往右、y 加大往上。
+  left: { x: -19, y: 26, w: 20, h: 15 },  // 左：單眼；通常和 right 用不同 x 來貼頭型。
+};
+
+const useNinjuSpriteOffset = { x: 3.1, y: -1.03 }; // use-ninju sprite compensation: x positive moves right, y positive moves down.
+
+// 拖曳後移動殘影 offset。X 正值往右，Y 正值往上。
+// prearrive 是移動前段的速度線，arrive 是後段的角色殘影合成圖。
+const moveEffectOffsets = {
+  prearrive: {
+    right: { x: 0, y: 0 },
+    left: { x: 0, y: 0 },
+    up: { x: 0, y: 0 },
+    down: { x: 0, y: 0 },
+  },
+  arrive: {
+    right: { x: -50, y: 15 },
+    left: { x: 50, y: 15 },
+    up: { x: 0, y: -45 },
+    down: { x: 0, y: 50 },
+  },
+};
+
+// 錢鏢視覺 offset。x 正值往右、y 正值往上。
+// 這裡統一控制：手上準備位置、無敵黃圈、飛行中的貼圖大小/位置、出手動畫位置。
+const moneyDartVisualOffsets = {
+  hold: {
+    // 基準點從角色中心出發，再依面向推到手邊。
+    handDistance: { x: 18, y: 12 },
+    center: { x: 0, y: 22 },
+    fallbackHalfSize: 12,
+    frameScale: 1.15,
+  },
+  invincibleRing: {
+    center: { x: 0, y: 18 },
+    radius: 32,
+  },
+  projectile: {
+    center: { x: 0, y: 20 },
+    horizontal: { halfW: 38, halfH: 24, w: 76, h: 48 },
+    vertical: { halfW: 25, halfH: 38, w: 50, h: 76 },
+  },
+  shoot: {
+    scale: 1.05,
+    right: { x: -34, y: 50 },
+    left: { x: 34, y: 50 },
+    up: { x: 0, y: -18 },
+    down: { x: 0, y: 50 },
+  },
 };
 const steelOutlineCache = new WeakMap();
 const hotBloodOutlineCache = new WeakMap();
@@ -75,10 +155,36 @@ function loadImages() {
     img.src = src;
   }));
   const atkUpImages = atkUpFrameSources.map((src, index) => loadFrame(src, atkUpFrames, index));
+  const regenHpSmallImages = regenHpSmallFrameSources.map((src, index) => loadFrame(src, regenHpSmallFrames, index));
+  const regenHpLargeImages = regenHpLargeFrameSources.map((src, index) => loadFrame(src, regenHpLargeFrames, index));
+  const smallThunderSummonImages = smallThunderSummonFrameSources.map((src, index) => loadFrame(src, smallThunderSummonFrames, index));
+  const smallThunderDamagedImages = smallThunderDamagedFrameSources.map((src, index) => loadFrame(src, smallThunderDamagedFrames, index));
+  const smallFireSummonImages = smallFireSummonFrameSources.map((src, index) => loadFrame(src, smallFireSummonFrames, index));
+  const smallFireDamagedImages = smallFireDamagedFrameSources.map((src, index) => loadFrame(src, smallFireDamagedFrames, index));
+  const smallIceSummonImages = smallIceSummonFrameSources.map((src, index) => loadFrame(src, smallIceSummonFrames, index));
+  const smallIceDamagedImages = smallIceDamagedFrameSources.map((src, index) => loadFrame(src, smallIceDamagedFrames, index));
+  const smallIceBreakImages = smallIceBreakFrameSources.map((src, index) => loadFrame(src, smallIceBreakFrames, index));
+  const damageFailImages = damageFailFrameSources.map((src, index) => loadFrame(src, damageFailFrames, index));
+  const faintedImages = faintedFrameSources.map((src, index) => loadFrame(src, faintedFrames, index));
+  const damageSuccessSmallImages = damageSuccessSmallFrameSources.map((src, index) => loadFrame(src, damageSuccessSmallFrames, index));
+  const damageSuccessMiddleImages = damageSuccessMiddleFrameSources.map((src, index) => loadFrame(src, damageSuccessMiddleFrames, index));
   const readyImages = moneyDartReadyFrameSources.map((src, index) => loadFrame(src, moneyDartReadyFrames, index));
   const respawnPointerImages = respawnPointerFrameSources.map((src, index) => loadFrame(src, respawnPointerFrames, index));
   const dragArrowImages = Object.entries(dragArrowFrameSources).flatMap(([direction, sources]) => (
     sources.map((src, index) => loadFrame(src, dragArrowFrames[direction], index))
+  ));
+  const movePrearriveImages = Object.entries(movePrearriveFrameSources).flatMap(([team, directions]) => (
+    Object.entries(directions).flatMap(([direction, sources]) => (
+      sources.map((src, index) => loadFrame(src, movePrearriveFrames[team][direction], index))
+    ))
+  ));
+  const moveArriveImages = Object.entries(moveArriveFrameSources).flatMap(([team, directions]) => (
+    Object.entries(directions).flatMap(([direction, sources]) => (
+      sources.map((src, index) => loadFrame(src, moveArriveFrames[team][direction], index))
+    ))
+  ));
+  const useNinjuImages = Object.entries(useNinjuFrameSources).flatMap(([team, sources]) => (
+    sources.map((src, index) => loadFrame(src, useNinjuFrames[team], index))
   ));
   const shootImages = Object.entries(moneyDartShootFrameSources).flatMap(([direction, sources]) => (
     sources.map((src, index) => loadFrame(src, moneyDartShootFrames[direction], index))
@@ -95,7 +201,7 @@ function loadImages() {
   ));
   const chargeRedImages = chargeRedFrameSources.map((src, index) => loadFrame(src, chargeRedFrames, index));
   const chargeYellowImages = chargeYellowFrameSources.map((src, index) => loadFrame(src, chargeYellowFrames, index));
-  return Promise.all([...staticImages, ...ninjuImages, ...atkUpImages, ...chargeRedImages, ...chargeYellowImages, ...readyImages, ...respawnPointerImages, ...dragArrowImages, ...weaponImages, ...shootImages]);
+  return Promise.all([...staticImages, ...ninjuImages, ...atkUpImages, ...regenHpSmallImages, ...regenHpLargeImages, ...smallThunderSummonImages, ...smallThunderDamagedImages, ...smallFireSummonImages, ...smallFireDamagedImages, ...smallIceSummonImages, ...smallIceDamagedImages, ...smallIceBreakImages, ...damageFailImages, ...faintedImages, ...damageSuccessSmallImages, ...damageSuccessMiddleImages, ...chargeRedImages, ...chargeYellowImages, ...readyImages, ...respawnPointerImages, ...dragArrowImages, ...movePrearriveImages, ...moveArriveImages, ...useNinjuImages, ...weaponImages, ...shootImages]);
 }
 
 // 載入單張動畫影格，成功後放到指定陣列位置。
@@ -120,6 +226,7 @@ function resetGame() {
   state.units = buildStartingUnits();
   state.attacks = [];
   state.projectiles = [];
+  state.ninjuDamageEffects = [];
   state.moneyDartCasts = [];
   state.selectedId = 1;
   state.pressedUnit = null;
@@ -142,7 +249,7 @@ function resetGame() {
 // 建立一個角色資料物件，包含血量、技、AI 與統計資料。
 function makeUnit(id, name, team, x, y, weaponKey = defaultWeaponKey, controlMode = "ai_beginner", hpMax = maxHp) {
   const aiNextThink = controlMode === "player" ? 0 : performance.now() + 520 + Math.random() * 500;
-  return { id, name, team, x, y, hp: hpMax, maxHp: hpMax, skill: maxSkill, facing: team === "blue" ? "right" : "left", alive: true, moveT: 1, fromX: x, fromY: y, hitFlash: 0, respawning: false, respawnTipUntil: 0, aiNextThink, aiActionAt: 0, aiPlanKey: "", ninju: null, steelUntil: 0, hotBloodUntil: 0, buffAuraType: "", moneyDart: null, ninjuLockedUntil: 0, weaponKey, controlMode, weaponReadyAt: 0, kills: 0, damageDone: 0, damageTaken: 0 };
+  return { id, name, team, x, y, hp: hpMax, maxHp: hpMax, skill: maxSkill, soulSteps: 0, facing: team === "blue" ? "right" : "left", alive: true, moveT: 1, fromX: x, fromY: y, hitFlash: 0, respawning: false, respawnTipUntil: 0, aiNextThink, aiActionAt: 0, aiPlanKey: "", ninju: null, steelUntil: 0, hotBloodUntil: 0, buffAuraType: "", disabledUntil: 0, invincibleUntil: 0, moneyDart: null, ninjuLockedUntil: 0, weaponKey, controlMode, weaponReadyAt: 0, kills: 0, damageDone: 0, damageTaken: 0 };
 }
 
 // 依照兩隊起始範圍隨機產生本局角色位置。
@@ -195,8 +302,8 @@ function setupWeaponSelects() {
 function setupControlSelects() {
   if (controlSelectEls.length === 0) return;
   const optionsHtml = `
-    <option value="player">玩家</option>
-    <option value="ai_beginner" selected>初心者</option>
+    <option value="player" selected>玩家</option>
+    <option value="ai_beginner">初心者</option>
     <option value="ai_money_dart_master">錢鏢神人</option>
     <option value="ai_dart_only_master">尬鏢神人</option>
   `;
@@ -242,7 +349,7 @@ function setupRoomSlots() {
       addBtn.addEventListener("click", () => {
         card.classList.add("active-slot");
         if (nameEl) nameEl.textContent = `${team}${slot}`;
-        if (levelEl) levelEl.textContent = `id-${team}${slot}`;
+        if (levelEl) levelEl.textContent = "";
         if (controlEl) controlEl.value = "ai_beginner";
       });
     }
@@ -313,6 +420,7 @@ function draw(now = performance.now()) {
       updateAi(dt, now);
       updateProjectiles(now);
     }
+    updateRestartHold(now);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     drawBackdrop();
     drawBoard();
@@ -325,6 +433,7 @@ function draw(now = performance.now()) {
     drawAttacks();
     drawGameHud();
     drawNinjuBar();
+    drawFrame();
     drawCountdownOverlay(now);
     drawResultOverlay();
     updatePanel();
@@ -332,6 +441,7 @@ function draw(now = performance.now()) {
     console.error("Render loop recovered", error);
     state.moneyDartCasts = [];
     state.projectiles = [];
+    state.ninjuDamageEffects = [];
   } finally {
     requestAnimationFrame(draw);
   }
@@ -381,15 +491,21 @@ function drawBackdrop() {
   ctx.fillStyle = "#062f37";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   drawUiPanels();
+  const mapDrawRect = {
+    x: grid.left + battleMapDrawInset.left,
+    y: grid.top + battleMapDrawInset.top,
+    w: grid.cols * grid.cell - battleMapDrawInset.left - battleMapDrawInset.right,
+    h: grid.rows * grid.cell - battleMapDrawInset.top - battleMapDrawInset.bottom,
+  };
   if (images.arena) {
-    ctx.drawImage(images.arena, grid.left, grid.top, grid.cols * grid.cell, grid.rows * grid.cell);
+    ctx.drawImage(images.arena, mapDrawRect.x, mapDrawRect.y, mapDrawRect.w, mapDrawRect.h);
   } else if (images.bg) {
     ctx.globalAlpha = 0.8;
-    ctx.drawImage(images.bg, grid.left, grid.top, grid.cols * grid.cell, grid.rows * grid.cell);
+    ctx.drawImage(images.bg, mapDrawRect.x, mapDrawRect.y, mapDrawRect.w, mapDrawRect.h);
     ctx.globalAlpha = 1;
   } else {
     ctx.fillStyle = "#74ad7f";
-    ctx.fillRect(grid.left, grid.top, grid.cols * grid.cell, grid.rows * grid.cell);
+    ctx.fillRect(mapDrawRect.x, mapDrawRect.y, mapDrawRect.w, mapDrawRect.h);
   }
   drawFrame();
 }
@@ -403,8 +519,6 @@ function drawUiPanels() {
   ctx.fillStyle = "#052b32";
   ctx.fillRect(8, bottom + 10, ui.leftPanelW - 18, ui.bottomHeight - 18);
   ctx.fillRect(ui.midX + 10, bottom + 10, canvas.width - ui.midX - 18, ui.bottomHeight - 18);
-  ctx.fillStyle = "rgba(0,0,0,.28)";
-  ctx.fillRect(0, 0, canvas.width, 32);
   ctx.restore();
 }
 
@@ -472,6 +586,8 @@ function drawBoard() {
 function drawUnits() {
   for (const unit of state.units) {
     if (!unit.alive) continue;
+    const moveProgress = unit.moveT;
+    const moveDirection = unitMoveDirection(unit);
     const p = unitPosition(unit);
     const selected = unit.id === state.selectedId;
     const bob = 0;
@@ -499,13 +615,22 @@ function drawUnits() {
       ctx.restore();
     }
 
-    const sprite = unitSprite(unit);
-    if (!activeMoneyDartCast(unit) && sprite) {
+    const useNinjuSprite = unitUseNinjuSprite(unit);
+    const sprite = useNinjuSprite || unitSprite(unit);
+    const moveSprite = moveProgress < 1 ? unitMoveSprite(unit, moveDirection, moveProgress) : null;
+    if (!activeMoneyDartCast(unit) && (moveSprite || sprite)) {
+      const drawSprite = moveSprite || sprite;
       const auraType = activeBuffAuraType(unit);
-      if (auraType === "steel") drawSteelSpriteOutline(sprite, p, bob);
-      if (auraType === "hotBlood") drawHotBloodSpriteOutline(sprite, p, bob);
-      ctx.drawImage(sprite, p.x - 31, p.y - 47 + bob, 62, 62);
-      drawUnitEyes(unit, p, bob);
+      if (auraType === "steel" && sprite) drawSteelSpriteOutline(sprite, p, bob);
+      if (auraType === "hotBlood" && sprite) drawHotBloodSpriteOutline(sprite, p, bob);
+      const spritePoint = useNinjuSprite && !moveSprite
+        ? { x: p.x + useNinjuSpriteOffset.x, y: p.y + useNinjuSpriteOffset.y }
+        : p;
+      drawUnitImage(drawSprite, spritePoint, bob, Boolean(moveSprite), moveDirection, moveEffectPhase(moveProgress));
+      if (!moveSprite) {
+        if (useNinjuSprite) drawUnitEyes({ ...unit, facing: "down" }, p, bob);
+        else drawUnitEyes(unit, p, bob);
+      }
     } else if (!activeMoneyDartCast(unit)) {
       ctx.fillStyle = unit.team === "blue" ? "#5bb8ff" : "#b5b9b3";
       ctx.beginPath();
@@ -565,8 +690,8 @@ function drawHotBloodSpriteOutline(sprite, p, bob = 0) {
 function drawBuffSpriteOutline(sprite, p, bob, cache, fill, shadow, outlineWidth, shadowBlur) {
   const mask = spriteColorMask(sprite, cache, fill);
   if (!mask) return;
-  const x = p.x - 31; // 外圈相對角色 X offset；改這裡可整體左右平移外圈。
-  const y = p.y - 47 + bob; // 外圈相對角色 Y offset；改這裡可整體上下平移外圈。
+  const offset = { x: -31, y: 47 }; // 外圈 offset：x 正值往右、y 正值往上。
+  const at = applyOffset({ x: p.x, y: p.y + bob }, offset);
   const pulse = 0.66 + Math.sin(performance.now() / 170) * 0.1; // 透明度脈動強度/速度。
 
   ctx.save();
@@ -577,7 +702,7 @@ function drawBuffSpriteOutline(sprite, p, bob, cache, fill, shadow, outlineWidth
     for (let dy = -outlineWidth; dy <= outlineWidth; dy++) {
       const distance = Math.hypot(dx, dy);
       if (distance <= 0 || distance > outlineWidth) continue;
-      ctx.drawImage(mask, x + dx, y + dy, 62, 62);
+      ctx.drawImage(mask, at.x + dx, at.y + dy, 62, 62);
     }
   }
   ctx.restore();
@@ -657,28 +782,31 @@ function drawRespawnPointer(unit, p) {
 function drawHeldMoneyDart(unit, p) {
   if (!unit.moneyDart) return;
   const dir = directionVector(unit.facing);
-  const holdX = p.x + dir.dx * 18;
-  const holdY = p.y - 22 + dir.dy * 12;
+  const hold = moneyDartVisualOffsets.hold;
+  const holdX = p.x + dir.dx * hold.handDistance.x + hold.center.x;
+  const holdY = p.y - hold.center.y + dir.dy * hold.handDistance.y;
   const now = performance.now();
   const elapsed = now - unit.moneyDart.startedAt;
   const readyFrame = moneyDartReadyFrame(elapsed);
   ctx.save();
   if (now < unit.moneyDart.invincibleUntil) {
+    const ring = moneyDartVisualOffsets.invincibleRing;
     ctx.globalAlpha = 0.35 + Math.sin(now / 55) * 0.12;
     ctx.strokeStyle = "#ffe26b";
     ctx.lineWidth = 5;
     ctx.beginPath();
-    ctx.arc(p.x, p.y - 18, 32, 0, Math.PI * 2);
+    ctx.arc(p.x + ring.center.x, p.y - ring.center.y, ring.radius, 0, Math.PI * 2);
     ctx.stroke();
     ctx.globalAlpha = 1;
   }
   ctx.shadowColor = "#ffd43b";
   ctx.shadowBlur = 12;
   if (readyFrame) {
-    const size = Math.max(24, readyFrame.width * 1.15);
+    const size = Math.max(24, readyFrame.width * hold.frameScale);
     ctx.drawImage(readyFrame, holdX - size / 2, holdY - size / 2, size, size);
   } else if (images.moneyDartHold) {
-    ctx.drawImage(images.moneyDartHold, holdX - 12, holdY - 12, 24, 24);
+    const half = hold.fallbackHalfSize;
+    ctx.drawImage(images.moneyDartHold, holdX - half, holdY - half, half * 2, half * 2);
   } else {
     ctx.fillStyle = "#ffd247";
     ctx.beginPath();
@@ -868,8 +996,9 @@ function drawProjectiles(now) {
     const eased = 1 - Math.pow(1 - age, 2);
     const from = cellCenter(projectile.from.x, projectile.from.y);
     const to = cellCenter(projectile.to.x, projectile.to.y);
+    const projectileVisual = moneyDartVisualOffsets.projectile;
     const x = from.x + (to.x - from.x) * eased;
-    const y = from.y + (to.y - from.y) * eased - 20;
+    const y = from.y + (to.y - from.y) * eased - projectileVisual.center.y;
     const img = moneyDartProjectileImage(projectile.dir);
 
     try {
@@ -879,7 +1008,8 @@ function drawProjectiles(now) {
       ctx.shadowBlur = 14;
       if (img) {
         const horizontal = projectile.dir === "left" || projectile.dir === "right";
-        ctx.drawImage(img, x - (horizontal ? 38 : 25), y - (horizontal ? 24 : 38), horizontal ? 76 : 50, horizontal ? 48 : 76);
+        const size = horizontal ? projectileVisual.horizontal : projectileVisual.vertical;
+        ctx.drawImage(img, x - size.halfW, y - size.halfH, size.w, size.h);
       } else {
         ctx.fillStyle = "#ffd447";
         ctx.beginPath();
@@ -940,13 +1070,15 @@ function activeMoneyDartCast(unit) {
 
 // 依方向決定錢鏢出手動畫的位置與尺寸。
 function moneyDartShootPlacement(direction, frame, p) {
-  const scale = 1.05;
+  const offsets = moneyDartVisualOffsets.shoot;
+  const offset = offsets[direction] || offsets.down;
+  const scale = offsets.scale;
   const w = frame.width * scale;
   const h = frame.height * scale;
-  if (direction === "right") return { x: p.x - 34, y: p.y - 50, w, h };
-  if (direction === "left") return { x: p.x + 34 - w, y: p.y - 50, w, h };
-  if (direction === "up") return { x: p.x - w / 2, y: p.y + 18 - h, w, h };
-  return { x: p.x - w / 2, y: p.y - 50, w, h };
+  if (direction === "right") return { x: p.x + offset.x, y: p.y - offset.y+10, w, h };
+  if (direction === "left") return { x: p.x + offset.x - w, y: p.y - offset.y+10, w, h };
+  if (direction === "up") return { x: p.x + offset.x - w / 2, y: p.y - offset.y - h+20, w, h };
+  return { x: p.x + offset.x - w / 2, y: p.y - offset.y, w, h };
 }
 
 // 依攻擊方向繪製武器揮砍弧線。
@@ -1007,12 +1139,12 @@ function drawUnitEyes(unit, p, bob = 0) {
     ctx.save();
     if (facing === "left") {
       // 左向改用鏡像（依目前素材方向做對調）。
-      ctx.translate(p.x + offset.x + offset.w, p.y + offset.y + bob);
+      ctx.translate(p.x + offset.x + offset.w, p.y - offset.y + bob);
       ctx.scale(-1, 1);
       ctx.drawImage(sideEye, 0, 0, offset.w, offset.h);
     } else {
       // 右向改用原圖（依目前素材方向做對調）。
-      ctx.drawImage(sideEye, p.x + offset.x, p.y + offset.y + bob, offset.w, offset.h);
+      ctx.drawImage(sideEye, p.x + offset.x, p.y - offset.y + bob, offset.w, offset.h);
     }
     ctx.restore();
     return;
@@ -1020,7 +1152,7 @@ function drawUnitEyes(unit, p, bob = 0) {
 
   const frontEyes = images.eyesFront;
   if (!frontEyes) return;
-  ctx.drawImage(frontEyes, p.x + offset.x, p.y + offset.y + bob, offset.w, offset.h);
+  ctx.drawImage(frontEyes, p.x + offset.x, p.y - offset.y + bob, offset.w, offset.h);
 }
 
 // 繪製玩家拖曳移動時的目標線與落點提示。
@@ -1041,7 +1173,7 @@ function drawDrag() {
   drawDragArrow(from, to, direction, enough);
 }
 
-// 用 ninja_arrow_0~3 的組合圖繪製拖曳移動方向。
+// 用整理後的 drag-arrow 組合圖繪製拖曳移動方向。
 function drawDragArrow(from, to, direction, enough) {
   const directionName = typeof direction === "string" ? direction : direction?.name;
   const frame = dragArrowFrames[directionName]?.[0];
@@ -1074,16 +1206,83 @@ function drawNinjuEffects(now) {
     const p = unitPosition(unit);
     if (isUnitCastingNinju(unit)) {
       const progress = Math.min(0.999, (now - unit.ninju.startedAt) / unit.ninju.duration);
-      const frames = unit.ninju.type === "hotBlood" ? atkUpFrames : defUpFrames;
+      const frames = ninjuCastFrames(unit.ninju.type);
       const frame = frames[Math.floor(progress * frames.length)];
       if (frame) {
         ctx.save();
         ctx.globalAlpha = 0.85;
-        ctx.drawImage(frame, p.x - 46, p.y - 68, 92, 92);
+        const size = attackNinjuConfigs[unit.ninju.type] ? 184 : 92;
+        ctx.drawImage(frame, p.x - size / 2, p.y - 22 - size / 2, size, size);
         ctx.restore();
       }
     }
   }
+  drawNinjuDamageEffects(now);
+}
+
+function ninjuCastFrames(type) {
+  if (attackNinjuConfigs[type]) return attackNinjuConfigs[type].summonFrames;
+  if (type === "hotBlood") return atkUpFrames;
+  if (type === "genki") return regenHpSmallFrames;
+  if (type === "kakki" || type === "shinki") return regenHpLargeFrames;
+  return defUpFrames;
+}
+
+function drawNinjuDamageEffects(now) {
+  if (!state.ninjuDamageEffects) return;
+  for (let i = state.ninjuDamageEffects.length - 1; i >= 0; i--) {
+    const effect = state.ninjuDamageEffects[i];
+    if (now < effect.startedAt) continue;
+    const frames = ninjuDamageFrames(effect.type);
+    const elapsed = now - effect.startedAt;
+    if (elapsed >= effect.duration || frames.length === 0) {
+      state.ninjuDamageEffects.splice(i, 1);
+      continue;
+    }
+    const frameDuration = effect.frameDuration || effect.duration;
+    const progress = Math.min(0.999, elapsed / frameDuration);
+    const frame = frames[Math.floor(progress * frames.length)];
+    if (!frame) continue;
+    const target = state.units.find((unit) => unit.id === effect.targetId);
+    const p = target && (target.alive || target.respawning) ? unitPosition(target) : effect.at;
+    const placement = ninjuDamageEffectPlacement(effect.type);
+    ctx.save();
+    ctx.globalAlpha = 0.9;
+    ctx.drawImage(frame, p.x + placement.x - placement.w / 2, p.y - placement.y - placement.h / 2, placement.w, placement.h);
+    ctx.restore();
+  }
+}
+
+function ninjuDamageFrames(type) {
+  if (attackNinjuConfigs[type]) return attackNinjuConfigs[type].hitFrames;
+  if (type === "freezeBreak") return smallIceBreakFrames;
+  if (type === "flashMiss") return damageFailFrames;
+  if (type === "flashHit") return faintedFrames;
+  if (type === "flashHitHead") return damageSuccessSmallFrames;
+  if (type === "wildfireMiddleHitHead") return damageSuccessMiddleFrames;
+  return [];
+}
+
+function ninjuDamageEffectPlacement(type) {
+  if (type === "flashMiss") return { x: 0, y: 76, w: 87, h: 57 };
+  if (type === "flashHitHead") return { x: 0, y: 78, w: 87, h: 57 };
+  if (type === "wildfireMiddleHitHead") return { x: 0, y: 78, w: 87, h: 57 };
+  if (type === "flashHit") return { x: 0, y: 35, w: 74, h: 74 };
+  return { x: 0, y: 22, w: 138, h: 138 };
+}
+
+function addNinjuDamageEffect(type, target, now = performance.now(), duration = 0, options = {}) {
+  if (!target) return;
+  if (!state.ninjuDamageEffects) state.ninjuDamageEffects = [];
+  const frames = ninjuDamageFrames(type);
+  state.ninjuDamageEffects.push({
+    type,
+    targetId: target.id,
+    at: unitPosition(target),
+    startedAt: now,
+    duration: duration || Math.max(300, frames.length * 40),
+    frameDuration: options.frameDuration || 0,
+  });
 }
 
 // ===== Rendering: Overlays / Result =====
@@ -1167,16 +1366,53 @@ function drawResultRow(values, y, header = false, team = "") {
 // ===== Rendering: HUD =====
 // 繪製遊戲中的上方與下方 HUD。
 function drawGameHud() {
+  drawSoulHud();
   drawTopHud();
   drawBottomPlayerHud();
   drawInventoryHud();
 }
 
+// Draws the soul HUD over the map, above the HP bar area.
+function drawSoulHud() {
+  const x = 16; // soul HUD X: bigger moves right.
+  const y = 470; // soul HUD Y: bigger moves down.
+  const w = 284; // soul HUD width.
+  const h = 66; // soul HUD height.
+  const barY = y + 44; // soul fill Y: bigger moves down.
+  const barH = 7; // soul fill height.
+  const tickXs = [61, 101, 154, 214, 275]; // soul tick X offsets: 0, soul1, soul2, soul3, soul4.
+  const unit = selectedHudUnit();
+  const soulSteps = Math.min(soulStepsPerLevel * soulMaxLevel, Math.max(0, unit?.soulSteps || 0));
+  const totalProgress = soulSteps / (soulStepsPerLevel * soulMaxLevel);
+  const completedLevel = Math.min(soulMaxLevel, Math.floor(soulSteps / soulStepsPerLevel));
+  const segmentProgress = completedLevel >= soulMaxLevel ? 1 : (soulSteps % soulStepsPerLevel) / soulStepsPerLevel;
+  const imageLevel = completedLevel <= 0 ? 1 : completedLevel + 1;
+  const imageKey = `soulHud${Math.min(5, imageLevel)}`;
+  const fillColors = ["#1b7a2d", "#1b7a2d", "#20248b", "#8c178e", "#c92116"]; // soul bar colors by completed level.
+  ctx.save();
+  if (images[imageKey]) {
+    ctx.drawImage(images[imageKey], x, y, w, h);
+  }
+  if (totalProgress > 0) {
+    const fromTick = tickXs[completedLevel];
+    const toTick = tickXs[Math.min(soulMaxLevel, completedLevel + 1)];
+    const fillEndOffset = completedLevel >= soulMaxLevel ? tickXs[soulMaxLevel] : fromTick + (toTick - fromTick) * segmentProgress;
+    const barX = x + tickXs[0];
+    const fillEndX = x + fillEndOffset;
+    const fill = Math.max(0, fillEndX - barX);
+    ctx.fillStyle = fillColors[completedLevel] || fillColors[0];
+    ctx.fillRect(barX, barY, fill, barH);
+  }
+  ctx.restore();
+}
+
 // 繪製上方玩家名稱、段數與段位文字。
 function drawTopHud() {
   ctx.save();
+  ctx.fillStyle = "rgba(6, 47, 55, .5)"; // 上方藍底顏色/透明度：最後的 .7 是透明度，0 完全透明，1 完全不透明。
+  ctx.fillRect(0, 0, canvas.width, 32); // 上方藍底位置/大小：第一個數字 X，第二個數字 Y，第四個數字高度；數字變大會往右/往下/變高。
   ctx.textBaseline = "middle";
-  drawIconImage(images.blueIcon, 38, 18, 42, 31);
+  drawIconImage(images.blueIcon, 38, 5, 35, 25); // 左上人頭位置/大小：X=38 往右，Y=18 往下，W=42 寬度，H=31 高度。
   drawOutlinedText("\u7687\u5929\u4e0d\u8ca0\u5de5\u5177\u4eba", 118, 18, 17, "#f4f3dd", "left"); // 上方玩家名稱位置/大小/顏色
   drawOutlinedText("99段", 294, 18, 18, "#f4f3dd", "center"); // 上方段數位置/大小/顏色
   drawOutlinedText("夜遊神", 372, 18, 18, "#f4f3dd", "center"); // 上方段位位置/大小/顏色
@@ -1270,9 +1506,9 @@ function drawInventoryHud() {
     drawNinjuSlot(x, ninjuY, 60, 30, ninjuLabels[i], false); // 忍術空框位置/大小，先畫在按鈕後面
   }
 
-  drawNinjuSlot(steelButtonRect.x, steelButtonRect.y, steelButtonRect.w, steelButtonRect.h, "鋼鐵", "steel"); // 鋼鐵按鈕位置/大小，後畫避免被忍術框蓋住
-  drawNinjuSlot(moneyDartButtonRect.x, moneyDartButtonRect.y, moneyDartButtonRect.w, moneyDartButtonRect.h, "錢鏢", "moneyDart"); // 錢鏢按鈕位置/大小
-  drawNinjuSlot(hotBloodButtonRect.x, hotBloodButtonRect.y, hotBloodButtonRect.w, hotBloodButtonRect.h, "熱血", "hotBlood"); // 熱血按鈕位置/大小
+  for (const button of currentNinjuButtonList()) {
+    drawNinjuSlot(button.x, button.y, button.w, button.h, button.label, button.type);
+  }
 
   drawSmallCounter(476, 644, "#2479a9", String(teamAliveCount("blue"))); // blue 存活數位置/顏色
   drawSmallCounter(476, 670, "#d8d8d8", String(teamAliveCount("grey"))); // grey 存活數位置/顏色
@@ -1297,37 +1533,95 @@ function drawNinjuSlot(x, y, w, h, text, type) {
   const unit = selectedHudUnit();
   const isSteel = type === true || type === "steel";
   const isHotBlood = type === "hotBlood";
+  const isAttackNinju = Boolean(attackNinjuConfigs[type]);
+  const isHeal = type === "genki" || type === "kakki" || type === "shinki";
   const isMoneyDart = type === "moneyDart";
-  const statusRule = isHotBlood ? hotBloodRule() : steelRule();
-  const active = unit && ((isSteel || isHotBlood) ? ((unit.ninju?.type === type && (isUnitCastingNinju(unit) || isUnitInNinjuGap(unit))) || (isSteel ? isSteelDefenseActive(unit) : isHotBloodActive(unit))) : isMoneyDart ? Boolean(unit.moneyDart) : false);
-  const ready = unit && unit.alive && ((isSteel || isHotBlood) ? unit.skill >= statusRule.cost : isMoneyDart);
+  const isStatusButton = isSteel || isHotBlood || isHeal || isAttackNinju;
+  const statusRule = isStatusButton ? statusButtonRule(type) : null;
+  const active = unit && (isStatusButton ? ((unit.ninju?.type === type && (isUnitCastingNinju(unit) || isUnitInNinjuGap(unit))) || (isSteel ? isSteelDefenseActive(unit) : isHotBlood ? isHotBloodActive(unit) : false)) : isMoneyDart ? Boolean(unit.moneyDart) : false);
+  const hasAttackSoul = !isAttackNinju || Math.floor((unit?.soulSteps || 0) / soulStepsPerLevel) >= 1;
+  const ready = !unit || (unit.alive && !isUnitDisabled(unit) && (isStatusButton ? statusRule.available !== false && unit.skill >= statusRule.cost && hasAttackSoul : isMoneyDart));
   ctx.save();
-  if ((isSteel || isHotBlood) && images.steelButton) {
+  if (isAttackNinju && images.flashButton) {
+    ctx.globalAlpha = ready ? 1 : 0.55;
+    ctx.drawImage(images.flashButton, x, y, w, h);
+    ctx.globalAlpha = 1;
+    const textAt = applyOffset({ x: x + w / 2, y: y + h / 2 }, { x: -1, y: -1 }); // text offset: x positive moves right, y positive moves up.
+    drawNinjuButtonText(text, textAt.x, textAt.y, 16, "#232323f8", "center");
+  } else if ((isSteel || isHotBlood) && images.steelButton) {
     ctx.globalAlpha = ready ? 1 : 0.55;
     ctx.drawImage(images.steelButton, x, y, w, h);
     ctx.globalAlpha = 1;
-    drawNinjuButtonText(text, x + w / 2 - 1, y + h / 2 + 1, 16, "#232323f8", "center"); // 鋼鐵/熱血字：跟錢鏢同字型、大小、顏色。
+    const textAt = applyOffset({ x: x + w / 2, y: y + h / 2 }, { x: -1, y: -1 }); // 忍術字 offset：x 正值往右、y 正值往上。
+    drawNinjuButtonText(text, textAt.x, textAt.y, 16, "#232323f8", "center");
+  } else if (isHeal && images.healButton) {
+    ctx.globalAlpha = ready ? 1 : 0.55;
+    ctx.drawImage(images.healButton, x, y, w, h);
+    ctx.globalAlpha = 1;
+    const textAt = applyOffset({ x: x + w / 2, y: y + h / 2 }, { x: -1, y: -1 }); // 忍術字 offset：x 正值往右、y 正值往上。
+    drawNinjuButtonText(text, textAt.x, textAt.y, 16, "#232323f8", "center");
   } else if (isMoneyDart && images.moneyDartButton) {
     ctx.globalAlpha = ready ? 1 : 0.55;
     ctx.drawImage(images.moneyDartButton, x, y, w, h);
     ctx.globalAlpha = 1;
-    drawNinjuButtonText(text, x + w / 2 -1, y + h / 2 + 1, 16, "#232323f8", "center"); // 錢鏢字：x/y offset、字大小、字色。
+    const textAt = applyOffset({ x: x + w / 2, y: y + h / 2 }, { x: -1, y: -1 }); // 忍術字 offset：x 正值往右、y 正值往上。
+    drawNinjuButtonText(text, textAt.x, textAt.y, 16, "#232323f8", "center");
   } else {
-    ctx.fillStyle = ready ? "#c78e42" : "#2d3d38";
+    ctx.fillStyle = text ? "#c78e42" : "#2d3d38";
     ctx.fillRect(x, y, w, h);
     ctx.strokeStyle = "#77bec6";
     ctx.lineWidth = 2;
     ctx.strokeRect(x, y, w, h);
-    if (text) drawOutlinedText(text, x + w / 2, y + h / 2 + 1, 15, ready ? "#ffe6a6" : "#1b1d18", "center");
+    if (text) drawOutlinedText(text, x + w / 2, y + h / 2 + 1, 15, "#ffe6a6", "center");
   }
   if (active) {
     ctx.fillStyle = "rgba(255,255,255,.35)";
     ctx.fillRect(x, y, w, h);
   }
-  if ((isSteel || isHotBlood) && unit && unit.ninju?.type === type && unit.ninju.queue > 0) {
+  if ((isSteel || isHotBlood || isHeal || isAttackNinju) && unit && unit.ninju?.type === type && unit.ninju.queue > 0) {
     drawOutlinedText(`x${unit.ninju.queue + 1}`, x + w - 10, y + 8, 12, "#fff2a8", "center");
   }
   ctx.restore();
+}
+
+function currentNinjuButtonRects() {
+  return {
+    moneyDart: typeof moneyDartButtonRect !== "undefined" ? moneyDartButtonRect : { x: 508, y: 600, w: 65, h: 30 },
+    steel: typeof steelButtonRect !== "undefined" ? steelButtonRect : { x: 582, y: 600, w: 65, h: 30 },
+    hotBlood: typeof hotBloodButtonRect !== "undefined" ? hotBloodButtonRect : { x: 656, y: 600, w: 65, h: 30 },
+    genki: typeof genkiButtonRect !== "undefined" ? genkiButtonRect : { x: 730, y: 600, w: 65, h: 30 },
+    kakki: typeof kakkiButtonRect !== "undefined" ? kakkiButtonRect : { x: 804, y: 600, w: 65, h: 30 },
+    shinki: typeof shinkiButtonRect !== "undefined" ? shinkiButtonRect : { x: 878, y: 600, w: 65, h: 30 },
+  };
+}
+
+function currentNinjuButtonList() {
+  const slots = currentNinjuSlotRects();
+  return selectedNinjuLoadout.map((type, index) => {
+    if (!type || !ninjuByType[type]) return null;
+    const source = slots[index] || slots[0];
+    const ninju = ninjuByType[type] || { label: type };
+    return {
+      ...source,
+      // Slot offset is intentional: user-tuned +0/+1/+2/+3/+4/+5 alignment.
+      x: source.x + index,
+      type,
+      label: ninju.label,
+    };
+  }).filter(Boolean);
+}
+
+function currentNinjuSlotRects() {
+  const rects = currentNinjuButtonRects();
+  return [rects.moneyDart, rects.steel, rects.hotBlood, rects.genki, rects.kakki, rects.shinki];
+}
+
+function statusButtonRule(type) {
+  if (attackNinjuConfigs[type]) return attackNinjuRule(type);
+  if (type === "hotBlood" && typeof hotBloodRule === "function") return hotBloodRule();
+  if ((type === "genki" || type === "kakki" || type === "shinki") && typeof healNinjuRule === "function") return healNinjuRule(type);
+  if (typeof steelRule === "function") return steelRule();
+  return { cost: 7 };
 }
 
 // 繪製 blue/grey 存活人數的小圓點計數。
@@ -1396,10 +1690,10 @@ function drawNinjuBar() {
   if (!active && !gap && !buff && (!unit.alive || unit.skill >= steelRule().cost)) return;
   ctx.save();
   ctx.fillStyle = "rgba(0,0,0,.55)";
-  ctx.fillRect(814, 616, 62, 30);
+  ctx.fillRect(814, 636, 62, 30);
   const buffUntil = Math.max(unit.steelUntil || 0, unit.hotBloodUntil || 0);
   const text = active ? "施放中" : gap ? "可移動" : buff ? `${Math.ceil((buffUntil - performance.now()) / 1000)}秒` : `技 ${steelRule().cost}`;
-  drawOutlinedText(text, 845, 631, 14, "#f7f6d7", "center");
+  drawOutlinedText(text, 845, 651, 14, "#f7f6d7", "center");
   ctx.restore();
 }
 
@@ -1411,6 +1705,48 @@ function unitPosition(unit) {
   const t = 1 - Math.pow(1 - unit.moveT, 3);
   unit.moveT = Math.min(1, unit.moveT + 0.08);
   return { x: from.x + (target.x - from.x) * t, y: from.y + (target.y - from.y) * t };
+}
+
+function unitMoveDirection(unit) {
+  const dx = unit.x - unit.fromX;
+  const dy = unit.y - unit.fromY;
+  if (Math.abs(dx) > Math.abs(dy)) return dx > 0 ? "right" : "left";
+  if (dy !== 0) return dy > 0 ? "down" : "up";
+  return unit.facing || "down";
+}
+
+function unitMoveSprite(unit, direction, progress) {
+  const team = unit.team === "blue" ? "blue" : "grey";
+  const frameSet = progress < 0.35 ? movePrearriveFrames : moveArriveFrames;
+  const frames = frameSet[team]?.[direction] || [];
+  const available = frames.filter(Boolean);
+  if (!available.length) return null;
+  const localProgress = progress < 0.35 ? progress / 0.35 : (progress - 0.35) / 0.65;
+  const index = Math.min(available.length - 1, Math.floor(localProgress * available.length));
+  return available[index];
+}
+
+function unitUseNinjuSprite(unit) {
+  if (!unit || unit.moneyDart || !isUnitCastingNinju(unit)) return null;
+  const team = unit.team === "blue" ? "blue" : "grey";
+  const frames = (useNinjuFrames[team] || []).filter(Boolean);
+  if (!frames.length) return null;
+  const progress = Math.min(0.999, (performance.now() - unit.ninju.startedAt) / unit.ninju.duration);
+  return frames[Math.floor(progress * frames.length)];
+}
+
+function moveEffectPhase(progress) {
+  return progress < 0.35 ? "prearrive" : "arrive";
+}
+
+function drawUnitImage(sprite, p, bob = 0, naturalSize = false, direction = "down", phase = "arrive") {
+  if (!naturalSize) {
+    ctx.drawImage(sprite, p.x - 31, p.y - 47 + bob, 62, 62);
+    return;
+  }
+  const offset = moveEffectOffsets[phase]?.[direction] || { x: 0, y: 0 };
+  const yOffset = sprite.height > sprite.width ? 78 : 26;
+  ctx.drawImage(sprite, p.x - sprite.width / 2 + offset.x, p.y - yOffset + bob - offset.y);
 }
 
 // ===== Input =====
@@ -1426,17 +1762,11 @@ function pointerDown(event) {
   pointerMove(event);
   if (!isMatchActive()) return;
   const cell = eventCell(event);
-  if (pointInRect(state.pointer.x, state.pointer.y, steelButtonRect)) {
-    useSteelNinju();
-    return;
-  }
-  if (pointInRect(state.pointer.x, state.pointer.y, hotBloodButtonRect)) {
-    useHotBloodNinju();
-    return;
-  }
-  if (pointInRect(state.pointer.x, state.pointer.y, moneyDartButtonRect)) {
-    useMoneyDart();
-    return;
+  for (const button of currentNinjuButtonList()) {
+    if (pointInRect(state.pointer.x, state.pointer.y, button)) {
+      useNinjuByType(button.type);
+      return;
+    }
   }
   if (!cell || state.gameOver) return;
 
@@ -1479,6 +1809,16 @@ function pointerDown(event) {
   setMessage("Move only works by holding a character, charging, then dragging to a cell.");
 }
 
+function useNinjuByType(type) {
+  if (type === "moneyDart") useMoneyDart();
+  else if (type === "steel") useSteelNinju();
+  else if (type === "hotBlood") useHotBloodNinju();
+  else if (attackNinjuConfigs[type]) useAttackNinju(type);
+  else if (type === "genki") useGenkiNinju();
+  else if (type === "kakki") useKakkiNinju();
+  else if (type === "shinki") useShinkiNinju();
+}
+
 // 處理滑鼠移動並更新目前指向的格子。
 function pointerMove(event) {
   const rect = canvas.getBoundingClientRect();
@@ -1487,7 +1827,7 @@ function pointerMove(event) {
   state.pointer.cell = pointToCell(state.pointer.x, state.pointer.y);
 
   const lookUnit = state.pressedUnit || selectedUnit();
-  if (lookUnit && canControlUnit(lookUnit) && lookUnit.alive) {
+  if (lookUnit && canControlUnit(lookUnit) && lookUnit.alive && !isUnitDisabled(lookUnit)) {
     updateFacingFromPointer(lookUnit);
   }
 
@@ -1674,13 +2014,13 @@ function playBreakSound(object) {
 function startBattleFromRoom() {
   state.inRoom = false;
   document.body.classList.remove("room-mode");
+  resetRestartHold();
   resetGame();
   syncBgm();
   startBgm();
 }
 
-// 結算畫面點一下回房間，並保留房間原本配置（卡片啟用、武器、控制模式、HP）。
-function returnToRoomFromResult() {
+function returnToRoom() {
   if (state.endSoundInstance) {
     state.endSoundInstance.pause();
     state.endSoundInstance.currentTime = 0;
@@ -1698,12 +2038,19 @@ function returnToRoomFromResult() {
   state.charging = false;
   state.attacks = [];
   state.projectiles = [];
+  state.ninjuDamageEffects = [];
   state.moneyDartCasts = [];
   clearDragState();
+  resetRestartHold();
   document.body.classList.add("room-mode");
   syncBgm();
   startBgm();
   setMessage("Back to room.");
+}
+
+// 結算畫面點一下回房間，並保留房間原本配置（卡片啟用、武器、控制模式、HP）。
+function returnToRoomFromResult() {
+  returnToRoom();
 }
 
 function updateRuleModeUi() {
@@ -1713,14 +2060,118 @@ function updateRuleModeUi() {
   ruleModeToggle.classList.toggle("checked", checked);
 }
 
+function startRestartHold(event) {
+  if (event.code !== "KeyR" || state.inRoom) return;
+  if (!restartHoldStartedAt) restartHoldStartedAt = performance.now();
+}
+
+function stopRestartHold(event) {
+  if (event.code !== "KeyR") return;
+  resetRestartHold();
+}
+
+function resetRestartHold() {
+  restartHoldStartedAt = 0;
+  restartHoldTriggered = false;
+}
+
+function updateRestartHold(now) {
+  if (!restartHoldStartedAt || restartHoldTriggered || state.inRoom) return;
+  if (now - restartHoldStartedAt < 3000) return;
+  restartHoldTriggered = true;
+  returnToRoom();
+}
+
 function toggleRuleMode() {
   state.useOriginalMode = !state.useOriginalMode;
   updateRuleModeUi();
 }
 
+function openNinjuEditor() {
+  if (!ninjuEditorEl) return;
+  editNinjuDraft = [...selectedNinjuLoadout];
+  editNinjuSlotIndex = 0;
+  renderNinjuEditor();
+  ninjuEditorEl.hidden = false;
+}
+
+function closeNinjuEditor() {
+  if (ninjuEditorEl) ninjuEditorEl.hidden = true;
+}
+
+function saveNinjuEditor() {
+  selectedNinjuLoadout = normalizedNinjuLoadout(editNinjuDraft);
+  window.localStorage.setItem(ninjuLoadoutStorageKey, JSON.stringify(selectedNinjuLoadout));
+  closeNinjuEditor();
+}
+
+function loadSavedNinjuLoadout() {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(ninjuLoadoutStorageKey) || "null");
+    if (Array.isArray(saved) && saved.length === 6 && saved.every((type) => !type || ninjuByType[type])) return normalizedNinjuLoadout(saved);
+  } catch (_) {
+    // Ignore broken localStorage data and fall back to the default six slots.
+  }
+  return [...defaultNinjuLoadout];
+}
+
+function normalizedNinjuLoadout(loadout) {
+  return Array.from({ length: 6 }, (_, index) => (ninjuByType[loadout[index]] ? loadout[index] : null));
+}
+
+function resetNinjuEditorLoadout() {
+  editNinjuDraft = Array(6).fill(null);
+  editNinjuSlotIndex = 0;
+  renderNinjuEditor();
+}
+
+function renderNinjuEditor() {
+  if (!ninjuEditorSlotsEl || !ninjuEditorListEl) return;
+  ninjuEditorSlotsEl.innerHTML = "";
+  for (let i = 0; i < 6; i++) {
+    const type = editNinjuDraft[i];
+    const ninju = ninjuByType[type] || { label: "空" };
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `ninju-slot-choice${i === editNinjuSlotIndex ? " selected" : ""}${type ? "" : " empty"}`;
+    if (type) button.dataset.ninjuType = type;
+    button.textContent = ninju.label;
+    button.addEventListener("click", () => {
+      editNinjuDraft[i] = null;
+      editNinjuSlotIndex = i;
+      renderNinjuEditor();
+    });
+    ninjuEditorSlotsEl.appendChild(button);
+  }
+
+  ninjuEditorListEl.innerHTML = "";
+  for (const ninju of ninjuEditorCatalog) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `ninju-option ${ninju.group}${editNinjuDraft.includes(ninju.type) ? " selected" : ""}`;
+    button.dataset.ninjuType = ninju.type;
+    button.dataset.editorRow = ninju.editorRow;
+    button.style.setProperty("--editor-order", ninju.editorOrder);
+    button.textContent = ninju.label;
+    button.addEventListener("click", () => {
+      const existingIndex = editNinjuDraft.indexOf(ninju.type);
+      if (existingIndex >= 0) editNinjuDraft[existingIndex] = null;
+      const emptyIndex = editNinjuDraft.findIndex((type) => !type);
+      if (emptyIndex < 0) return;
+      editNinjuDraft[emptyIndex] = ninju.type;
+      const nextEmptyIndex = editNinjuDraft.findIndex((type) => !type);
+      editNinjuSlotIndex = nextEmptyIndex >= 0 ? nextEmptyIndex : emptyIndex;
+      renderNinjuEditor();
+    });
+    ninjuEditorListEl.appendChild(button);
+  }
+}
+
 canvas.addEventListener("pointerdown", pointerDown);
 canvas.addEventListener("pointermove", pointerMove);
 window.addEventListener("pointerup", pointerUp);
+window.addEventListener("keydown", startRestartHold);
+window.addEventListener("keyup", stopRestartHold);
 resetBtn.addEventListener("click", resetGame);
 resetBtn.addEventListener("click", startBgm);
 setupWeaponSelects();
@@ -1728,6 +2179,10 @@ setupControlSelects();
 setupHpInputs();
 setupRoomSlots();
 if (battleStartBtn) battleStartBtn.addEventListener("click", startBattleFromRoom);
+if (teamEditBtn) teamEditBtn.addEventListener("click", openNinjuEditor);
+if (ninjuEditorResetBtn) ninjuEditorResetBtn.addEventListener("click", resetNinjuEditorLoadout);
+if (ninjuEditorCancelBtn) ninjuEditorCancelBtn.addEventListener("click", closeNinjuEditor);
+if (ninjuEditorSaveBtn) ninjuEditorSaveBtn.addEventListener("click", saveNinjuEditor);
 if (musicVolumeInput) musicVolumeInput.addEventListener("input", applyVolumeControls);
 if (sfxVolumeInput) sfxVolumeInput.addEventListener("input", applyVolumeControls);
 if (ruleModeToggle) ruleModeToggle.addEventListener("click", toggleRuleMode);

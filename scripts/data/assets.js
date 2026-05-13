@@ -1,25 +1,36 @@
 // Asset paths and frame buffers. Loading still happens in game.js for now.
-const roomBgm = new Audio("assets/audio/lobby.mp3");
-const battleBgm = new Audio("assets/audio/bgm.mp3");
+const roomBgm = new Audio("assets/sounds/bgm/lobby.mp3");
+const battleBgm = new Audio("assets/sounds/bgm/bgm.mp3");
 
 const soundSources = {
-  move: "assets/sfx/ninja/normalmove.ogg",
-  runOver: "assets/sfx/ninja/run_over/3.ogg",
-  respawn: "assets/sfx/ninja/respawn_tips_1.ogg",
-  weaponDamaged: "assets/sfx/ninja/weapon_damaged.ogg",
-  death: "assets/sfx/ninja/death/1.ogg",
-  slash: "assets/sfx/weapon/1.ogg",
-  useNinju: "assets/sfx/ninja/useninju.ogg",
-  takeDart: "assets/sfx/ninja/takedart.ogg",
-  shootDart: "assets/sfx/ninja/shootdart.ogg",
-  statusEnergyUp1: "assets/sfx/ninja/status/energy_up_1.ogg",
-  statusEnergyUp2: "assets/sfx/ninja/status/energy_up_2.ogg",
-  gameStarted: "assets/sfx/in_game/game_started.ogg",
-  win: "assets/sfx/in_game/game_end/win.ogg",
-  lose: "assets/sfx/in_game/game_end/lose1.ogg",
-  breakDefault: "assets/sfx/break_item/1.ogg",
-  breakVase: "assets/sfx/break_item/2.ogg",
-  breakChest: "assets/sfx/break_item/3.ogg",
+  move: "assets/sounds/ninja/normalmove.ogg",
+  runOver: "assets/sounds/ninja/run_over/3.ogg",
+  respawn: "assets/sounds/ninja/respawn_tips_1.ogg",
+  weaponDamaged: "assets/sounds/ninja/weapon_damaged.ogg",
+  death: "assets/sounds/ninja/death/1.ogg",
+  slash1: "assets/sounds/weapon/1.ogg",
+  slash3: "assets/sounds/weapon/3.ogg",
+  slash4: "assets/sounds/weapon/4.ogg",
+  slash6: "assets/sounds/weapon/6.ogg",
+  useNinju: "assets/sounds/ninja/useninju.ogg",
+  takeDart: "assets/sounds/ninja/takedart.ogg",
+  shootDart: "assets/sounds/ninja/shootdart.ogg",
+  statusEnergyUp1: "assets/sounds/ninja/status/energy_up_1.ogg",
+  statusEnergyUp2: "assets/sounds/ninja/status/energy_up_2.ogg",
+  regenHpSmall: "assets/sounds/ninja/status/regen_hp_s.ogg",
+  regenHpLarge: "assets/sounds/ninja/status/regen_hp_l.ogg",
+  summonSmall: "assets/sounds/ninja/status/summon/summon_small.ogg",
+  smallThunder: "assets/sounds/ninja/status/damaged/small_thunder.ogg",
+  smallFire: "assets/sounds/ninja/status/damaged/small_fire.ogg",
+  smallIceHit: "assets/sounds/ninja/status/damaged/small_ice_hit.ogg",
+  gameStarted: "assets/sounds/in_game/game_started.ogg",
+  soulLevelUp: "assets/sounds/in_game/soul/1.ogg",
+  soulMax: "assets/sounds/in_game/soul/3.ogg",
+  win: "assets/sounds/in_game/game_end/win.ogg",
+  lose: "assets/sounds/in_game/game_end/lose.ogg",
+  breakDefault: "assets/sounds/break_item/1.ogg",
+  breakVase: "assets/sounds/break_item/2.ogg",
+  breakChest: "assets/sounds/break_item/3.ogg",
 };
 
 const images = {};
@@ -36,26 +47,28 @@ const sounds = Object.fromEntries(Object.entries(soundSources).map(([key, src]) 
 });
 
 const imageSources = {
-  bg: "assets/map/bg.png",
-  arena: "assets/map/arena-base.png",
-  blueDown: "assets/ninja-blue/idleDown.png",
-  blueLeft: "assets/ninja-blue/idleLeft.png",
-  blueRight: "assets/ninja-blue/idleRight.png",
-  blueUp: "assets/ninja-blue/idleUp.png",
-  greyDown: "assets/ninja-grey/idleDown.png",
-  greyLeft: "assets/ninja-grey/idleLeft.png",
-  greyRight: "assets/ninja-grey/idleRight.png",
-  greyUp: "assets/ninja-grey/idleUp.png",
-  tree: "assets/map-objects/tree.png",
-  hay: "assets/map-objects/hay.png",
-  vase: "assets/map-objects/vase.png",
-  barrel: "assets/map-objects/barrel.png",
-  chest: "assets/map-objects/chest.png",
-  flower: "assets/map-objects/flower.png",
-  rock: "assets/map-objects/rock.png",
-  stump: "assets/map-objects/stump.png",
+  bg: "assets/map/map/森林10/bg.png",
+  arena: "assets/map/map/森林10/arena-base.png",
+  blueDown: "assets/characters/idle/blue/down.png",
+  blueLeft: "assets/characters/idle/blue/left.png",
+  blueRight: "assets/characters/idle/blue/right.png",
+  blueUp: "assets/characters/idle/blue/up.png",
+  greyDown: "assets/characters/idle/grey/down.png",
+  greyLeft: "assets/characters/idle/grey/left.png",
+  greyRight: "assets/characters/idle/grey/right.png",
+  greyUp: "assets/characters/idle/grey/up.png",
+  tree: "assets/map/map/森林10/tree.png",
+  hay: "assets/map/map/森林10/hay.png",
+  vase: "assets/map/map/森林10/vase.png",
+  barrel: "assets/map/map/森林10/barrel.png",
+  chest: "assets/map/map/森林10/chest.png",
+  flower: "assets/map/map/森林10/flower.png",
+  rock: "assets/map/map/森林10/rock.png",
+  stump: "assets/map/map/森林10/stump.png",
+  flashButton: "assets/ninju/buttons/1.png",
   steelButton: "assets/ninju/buttons/2.png",
-  moneyDartButton: "assets/ninju/money_mark/button_base/3.png",
+  moneyDartButton: "assets/ninju/buttons/3.png",
+  healButton: "assets/ninju/buttons/4.png",
   moneyDartHold: "assets/ninju/money_mark/projectile_candidates/images_weapon_93/taking.png",
   moneyDartDown: "assets/ninju/money_mark/projectile_candidates/images_weapon_93/goldpanD.png",
   moneyDartLeft: "assets/ninju/money_mark/projectile_candidates/images_weapon_93/goldpanL.png",
@@ -65,6 +78,11 @@ const imageSources = {
   greyIcon: "assets/ui/g_icon.png",
   blueTeam: "assets/ui/b_team.png",
   greyTeam: "assets/ui/g_team.png",
+  soulHud1: "assets/ui/soul/1.png",
+  soulHud2: "assets/ui/soul/2.png",
+  soulHud3: "assets/ui/soul/3.png",
+  soulHud4: "assets/ui/soul/4.png",
+  soulHud5: "assets/ui/soul/5.png",
   barBackground: "assets/ui/bar/bar_background.png",
   barFrame: "assets/ui/bar/bar.png",
   barLight: "assets/ui/bar/bar_light.png",
@@ -78,28 +96,125 @@ const imageSources = {
   ninjuIcon4: "assets/ninju/consumables/4.png",
   ninjuIcon5: "assets/ninju/consumables/5.png",
   ninjuIcon6: "assets/ninju/consumables/6.png",
-  chargeOuter: "assets/charge-effect-candidates/matched-charge-ring/final-candidate/outer_moving.png",
-  eyesFront: "assets/ninja-composite-parts/eyes-middle/11.png",
-  eyeSide: "assets/ninja-composite-parts/eyes-look-right/11.png",
+  chargeOuter: "assets/characters/charge/outer_moving.png",
+  eyesFront: "assets/characters/parts/eyes-middle/11.png",
+  eyeSide: "assets/characters/parts/eyes-look-right/11.png",
 };
 
 const defUpFrameSources = Array.from({ length: 31 }, (_, index) => `assets/ninju/status/def_up/${index + 1}.png`);
 const defUpFrames = [];
 const atkUpFrameSources = Array.from({ length: 31 }, (_, index) => `assets/ninju/status/atk_up/${index + 1}.png`);
 const atkUpFrames = [];
-const chargeRedFrameSources = Array.from({ length: 4 }, (_, index) => `assets/charge-effect-candidates/matched-charge-ring/final-candidate/inner_fire/${index + 1}.png`);
-const chargeYellowFrameSources = Array.from({ length: 4 }, (_, index) => `assets/charge-effect-candidates/matched-charge-ring/final-candidate/inner_fire/${index + 5}.png`);
+const regenHpSmallFrameSources = Array.from({ length: 23 }, (_, index) => `assets/ninju/status/regen_hp_s/${String(index + 1).padStart(2, "0")}.png`);
+const regenHpSmallFrames = [];
+const regenHpLargeFrameSources = Array.from({ length: 24 }, (_, index) => `assets/ninju/status/regen_hp_l/${String(index + 1).padStart(2, "0")}.png`);
+const regenHpLargeFrames = [];
+const smallThunderSummonFrameSources = Array.from({ length: 25 }, (_, index) => `assets/ninju/status/summon/small_thunder/${index + 1}.png`);
+const smallThunderSummonFrames = [];
+const smallThunderDamagedFrameSources = Array.from({ length: 36 }, (_, index) => `assets/ninju/status/damaged/small_thunder/${index + 1}.png`);
+const smallThunderDamagedFrames = [];
+const smallFireSummonFrameSources = Array.from({ length: 23 }, (_, index) => `assets/ninju/status/summon/small_fire/${String(index + 1).padStart(2, "0")}.png`);
+const smallFireSummonFrames = [];
+const smallFireDamagedFrameSources = Array.from({ length: 43 }, (_, index) => `assets/ninju/status/small_fire/${index + 1}.png`);
+const smallFireDamagedFrames = [];
+const smallIceSummonFrameSources = Array.from({ length: 23 }, (_, index) => `assets/ninju/status/summon/small_ice/${String(index + 1).padStart(2, "0")}.png`);
+const smallIceSummonFrames = [];
+const smallIceDamagedFrameSources = Array.from({ length: 40 }, (_, index) => `assets/ninju/status/small_ice/${index + 1}.png`);
+const smallIceDamagedFrames = [];
+const smallIceBreakFrameSources = Array.from({ length: 2 }, (_, index) => `assets/ninju/status/small_ice/${41 + index}.png`);
+const smallIceBreakFrames = [];
+const damageFailFrameSources = Array.from({ length: 10 }, (_, index) => `assets/ninju/status/damage_fail/${index + 1}.png`);
+const damageFailFrames = [];
+const faintedFrameSources = Array.from({ length: 34 }, (_, index) => `assets/ninju/status/fainted/${index + 1}.png`);
+const faintedFrames = [];
+const damageSuccessSmallFrameSources = Array.from({ length: 10 }, (_, index) => `assets/ninju/status/damage_success/small/Symbol ${3090001 + index}.png`);
+const damageSuccessSmallFrames = [];
+const damageSuccessMiddleFrameSources = Array.from({ length: 10 }, (_, index) => `assets/ninju/status/damage_success/middle/Symbol ${3090001 + index}.png`);
+const damageSuccessMiddleFrames = [];
+const attackNinjuConfigs = {
+  flash: {
+    label: "\u9583\u5149",
+    rule: "flashRule",
+    summonFrames: smallThunderSummonFrames,
+    hitFrames: smallThunderDamagedFrames,
+    castSound: "summonSmall",
+    hitSound: "smallThunder",
+  },
+  wildfire: {
+    label: "\u91ce\u706b",
+    rule: "wildfireRule",
+    summonFrames: smallFireSummonFrames,
+    hitFrames: smallFireDamagedFrames,
+    castSound: "summonSmall",
+    hitSound: "smallFire",
+    outcomes: [
+      { chance: 0.3, damage: 50, headEffect: "flashHitHead" },
+      { chance: 0.2, damage: 100, headEffect: "wildfireMiddleHitHead" },
+    ],
+  },
+  freeze: {
+    label: "\u6025\u51cd",
+    rule: "freezeRule",
+    summonFrames: smallIceSummonFrames,
+    hitFrames: smallIceDamagedFrames,
+    castSound: "summonSmall",
+    hitSound: "smallIceHit",
+    holdHitLastFrame: true,
+    breakEffect: "freezeBreak",
+    hitBodyEffect: null,
+    outcomes: [
+      { chance: 0.35, damage: 50, headEffect: "flashHitHead", hitDisableMs: freezeHitDisableMs },
+    ],
+  },
+};
+const chargeRedFrameSources = Array.from({ length: 4 }, (_, index) => `assets/characters/charge/inner_fire/${index + 1}.png`);
+const chargeYellowFrameSources = Array.from({ length: 4 }, (_, index) => `assets/characters/charge/inner_fire/${index + 5}.png`);
 const chargeRedFrames = [];
 const chargeYellowFrames = [];
-const respawnPointerFrameSources = Array.from({ length: 32 }, (_, index) => `assets/respawn-pointer-candidates/ninja_back_pointer/${index + 1}.png`);
+const respawnPointerFrameSources = Array.from({ length: 32 }, (_, index) => `assets/characters/pointers/respawn/${index + 1}.png`);
 const respawnPointerFrames = [];
 const dragArrowFrameSources = {
-  right: Array.from({ length: 6 }, (_, index) => `assets/respawn-pointer-candidates/ninja_arrow_0/${index + 1}.png`),
-  left: Array.from({ length: 6 }, (_, index) => `assets/respawn-pointer-candidates/ninja_arrow_1/${index + 1}.png`),
-  up: Array.from({ length: 6 }, (_, index) => `assets/respawn-pointer-candidates/ninja_arrow_2/${index + 1}.png`),
-  down: Array.from({ length: 6 }, (_, index) => `assets/respawn-pointer-candidates/ninja_arrow_3/${index + 1}.png`),
+  right: Array.from({ length: 6 }, (_, index) => `assets/characters/pointers/drag-arrow/right/${index + 1}.png`),
+  left: Array.from({ length: 6 }, (_, index) => `assets/characters/pointers/drag-arrow/left/${index + 1}.png`),
+  up: Array.from({ length: 6 }, (_, index) => `assets/characters/pointers/drag-arrow/up/${index + 1}.png`),
+  down: Array.from({ length: 6 }, (_, index) => `assets/characters/pointers/drag-arrow/down/${index + 1}.png`),
 };
 const dragArrowFrames = { right: [], left: [], up: [], down: [] };
+
+const moveDirections = ["right", "left", "up", "down"];
+const movePrearriveFrameSources = {
+  blue: Object.fromEntries(moveDirections.map((direction) => [
+    direction,
+    Array.from({ length: 2 }, (_, index) => `assets/characters/move/blue/prearrive/${direction}/${index + 1}.png`),
+  ])),
+  grey: Object.fromEntries(moveDirections.map((direction) => [
+    direction,
+    Array.from({ length: 2 }, (_, index) => `assets/characters/move/grey/prearrive/${direction}/${index + 1}.png`),
+  ])),
+};
+const moveArriveFrameSources = {
+  blue: Object.fromEntries(moveDirections.map((direction) => [
+    direction,
+    Array.from({ length: 5 }, (_, index) => `assets/characters/move/blue/arrive/${direction}/${index + 1}.png`),
+  ])),
+  grey: Object.fromEntries(moveDirections.map((direction) => [
+    direction,
+    Array.from({ length: 5 }, (_, index) => `assets/characters/move/grey/arrive/${direction}/${index + 1}.png`),
+  ])),
+};
+const movePrearriveFrames = {
+  blue: { right: [], left: [], up: [], down: [] },
+  grey: { right: [], left: [], up: [], down: [] },
+};
+const moveArriveFrames = {
+  blue: { right: [], left: [], up: [], down: [] },
+  grey: { right: [], left: [], up: [], down: [] },
+};
+const useNinjuFrameSources = {
+  blue: Array.from({ length: 12 }, (_, index) => `assets/characters/use-ninju/blue/${index + 1}.png`),
+  grey: Array.from({ length: 12 }, (_, index) => `assets/characters/use-ninju/grey/${index + 1}.png`),
+};
+const useNinjuFrames = { blue: [], grey: [] };
 
 const moneyDartReadyFrameSources = Array.from({ length: 10 }, (_, index) => `assets/ninju/money_mark/projectile_candidates/images_ninja_dart/${index + 1}.png`);
 const moneyDartReadyFrames = [];

@@ -1,5 +1,4 @@
-// ===== Match Flow =====
-// 檢查任一隊全滅並觸發結算。
+﻿// ===== Match Flow =====
 function checkVictory() {
   if (state.result) return;
   const blueLeft = state.units.some((u) => u.team === "blue" && (u.alive || u.respawning));
@@ -11,7 +10,6 @@ function checkVictory() {
   }
 }
 
-// 結束比賽、記錄時間並播放勝敗音效。
 function finishMatch(winner) {
   const now = performance.now();
   state.gameOver = true;

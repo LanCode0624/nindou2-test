@@ -54,8 +54,8 @@
 
 目前有兩首：
 
-- 房間：`assets/audio/lobby.mp3`
-- 戰鬥：`assets/audio/bgm.mp3`
+- 房間：`assets/sounds/bgm/lobby.mp3`
+- 戰鬥：`assets/sounds/bgm/bgm.mp3`
 
 不要把音樂改回外部絕對路徑。`startBgm()`、`syncBgm()`、`activeBgm()` 控制何時播放哪一首。
 

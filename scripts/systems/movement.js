@@ -1,9 +1,16 @@
-// ===== Movement / Collision =====
-// 依技量、障礙與方向規則執行玩家拖曳移動。
+﻿// ===== Movement / Collision =====
 function skillMove(unit, cell) {
   if (!cell) return;
   if (unit.moneyDart) {
     setMessage(`${unit.name}: cannot move while holding money dart.`);
+    return;
+  }
+  if (!weaponIsReady(unit)) {
+    setMessage(`${unit.name}: cannot move while weapon is recovering.`);
+    return;
+  }
+  if (isUnitDisabled(unit)) {
+    setMessage(`${unit.name}: cannot act now.`);
     return;
   }
   if (!canUnitMoveNow(unit)) {
@@ -33,6 +40,7 @@ function skillMove(unit, cell) {
   const cost = Math.max(1, manhattan(unit, cell));
 
   unit.skill -= cost;
+  gainSoul(unit, cost);
   moveUnit(unit, cell.x, cell.y);
   if (path.hitEnemies.length > 0) {
     for (const enemy of path.hitEnemies) {
@@ -43,7 +51,16 @@ function skillMove(unit, cell) {
   }
 }
 
-// 更新角色格子位置並啟動移動動畫。
+function gainSoul(unit, steps) {
+  if (!unit || !canControlUnit(unit)) return;
+  const maxSteps = soulStepsPerLevel * soulMaxLevel;
+  const before = unit.soulSteps || 0;
+  const beforeLevel = Math.min(soulMaxLevel, Math.floor(before / soulStepsPerLevel));
+  unit.soulSteps = Math.min(maxSteps, before + Math.max(0, steps));
+  const afterLevel = Math.min(soulMaxLevel, Math.floor(unit.soulSteps / soulStepsPerLevel));
+  if (afterLevel > beforeLevel) playSound(afterLevel >= soulMaxLevel ? "soulMax" : "soulLevelUp");
+}
+
 function moveUnit(unit, x, y) {
   updateFacing(unit, { x, y });
   unit.fromX = unit.x;
@@ -59,7 +76,6 @@ function moveUnit(unit, x, y) {
   playSound("move");
 }
 
-// 角色被撞或狀態中斷時取消目前拖曳畫面。
 function cancelDragIfPressed(unit) {
   if (state.pressedUnit !== unit) return;
   state.pressedUnit = null;
@@ -67,15 +83,15 @@ function cancelDragIfPressed(unit) {
   state.charging = false;
 }
 
-// 處理移動撞到敵人時的傷害、消失與重生。
 function collideWithEnemy(mover, enemy) {
   if (isUnitInvincible(enemy)) {
     setMessage(`${enemy.name} is invincible.`);
     return;
   }
-  const damage = defendedDamage(enemy, weaponDamage);
+  const damage = defendedDamage(enemy, collisionDamage);
   enemy.hp = Math.max(0, enemy.hp - damage);
-  recordDamage(mover, enemy, damage);
+  recordDamage(mover, enemy, damage, { skipSoulGain: true });
+  gainSoul(mover, soulCombatGainSteps);
   enemy.hitFlash = 0.65;
   enemy.alive = false;
   enemy.moneyDart = null;
@@ -85,6 +101,7 @@ function collideWithEnemy(mover, enemy) {
 
   if (enemy.hp <= 0) {
     enemy.respawning = false;
+    gainSoul(enemy, soulDeathGainSteps);
     mover.kills += 1;
     playSound("death");
     setMessage(`${enemy.name} defeated.`);
@@ -97,7 +114,6 @@ function collideWithEnemy(mover, enemy) {
   }
 }
 
-// 讓被撞掉但未死亡的角色隨機重生。
 function respawnUnit(unit) {
   if (!state.units.includes(unit)) return;
   const cell = randomOpenCell();
@@ -115,7 +131,6 @@ function respawnUnit(unit) {
   setMessage(`${unit.name} respawned.`);
 }
 
-// 尋找沒有障礙、物件與角色佔用的隨機空格。
 function randomOpenCell() {
   const candidates = [];
   for (let y = 1; y < grid.rows - 1; y++) {
@@ -128,13 +143,11 @@ function randomOpenCell() {
   return candidates[Math.floor(Math.random() * candidates.length)];
 }
 
-// 依路徑與距離限制取得實際可抵達格。
 function reachableMoveCell(unit, wanted, maxDistance = Infinity) {
   const path = movePath(unit, wanted, maxDistance);
   return path ? path.cell : null;
 }
 
-// 計算直線移動路徑，遇到障礙會停在前一格。
 function movePath(unit, wanted, maxDistance = Infinity) {
   if (!wanted || !isStraightMove(unit, wanted)) return null;
   const dx = Math.sign(wanted.x - unit.x);
@@ -166,7 +179,6 @@ function movePath(unit, wanted, maxDistance = Infinity) {
   return lastOpen.x === unit.x && lastOpen.y === unit.y ? null : { cell: lastOpen, hitEnemies };
 }
 
-// 依滑鼠角度與位置計算拖曳移動目標格。
 function dragMoveTargetCell(unit) {
   if (!unit) return null;
   const origin = cellCenter(unit.x, unit.y);
@@ -183,7 +195,6 @@ function dragMoveTargetCell(unit) {
   return inside(unit.x, y) ? { x: unit.x, y } : null;
 }
 
-// 檢查兩格之間是否有直線可通過。
 function clearStraightPath(from, to, allowedFinalUnit) {
   if (!isStraightMove(from, to)) return false;
   const dx = Math.sign(to.x - from.x);
